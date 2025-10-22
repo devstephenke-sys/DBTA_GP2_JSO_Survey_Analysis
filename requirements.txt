@@ -1,0 +1,5 @@
+pandas
+plotly
+ipywidgets
+voila
+openpyxl
