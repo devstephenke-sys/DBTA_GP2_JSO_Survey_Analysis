@@ -53,7 +53,7 @@ st.markdown(f"""
         </div>
         <div style="text-align:right;">
             <p style="margin:0; font-size:14px; color:#ddd;">Generated on {today}</p>
-            <img src="DonBoscoTechAfricaLogo.png" width="120" style="border-radius:8px; margin-top:6px;">
+            <img src="../DonBoscoTechAfricaLogo.png" width="120" style="border-radius:8px; margin-top:6px;">
         </div>
     </div>
 </div>
