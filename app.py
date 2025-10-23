@@ -30,7 +30,7 @@ st.markdown(f"""
     </div>
     <div style="text-align:right;">
       <p style="margin:0;font-size:13px;color:#ddd;">Generated on {today}</p>
-      <img src="DonBoscoTechAfricaLogo.png" width="110" style="border-radius:6px;margin-top:6px;">
+      <img src="https://tvet.dbtechafrica.org/pluginfile.php/1/core_admin/logo/0x200/1747917709/LogoRGB%20%283%29.png" width="110" style="border-radius:6px;margin-top:6px;">
     </div>
   </div>
 </div>
