@@ -287,7 +287,7 @@ elif q_type == "🤝 Collaboration (Multi-Select)":
                     rec = (f"Low adoption (n={total_resp}). Run focused awareness and short practical workshops.")
 
                 body = (f"<p><b>{total_resp}</b> respondents reported <b>{question_sel}</b>. "
-                        f"Top country: <b>{top_country}</b> ({top_count}).</p>"
+                        f"Country: <b>{top_country}</b> ({top_count}).</p>"
                         f"<h4>💡 Recommendation</h4><p>{rec}</p>")
                 summary_card("📋 Collaboration Summary", body)
 
