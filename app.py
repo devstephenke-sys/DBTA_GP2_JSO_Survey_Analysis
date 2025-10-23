@@ -380,16 +380,6 @@ elif q_type == "🎓 Graduate Analysis":
                 line.update_layout(plot_bgcolor=CHART_BG, paper_bgcolor=CHART_BG, font_color=TEXT_COLOR, title_x=0.5)
                 st.plotly_chart(line, use_container_width=True)
 
-        # bar by country stacked/grouped if many countries
-        df_plot = grouped.melt(id_vars=[country_col], value_vars=[male_col, female_col], var_name="GenderCol", value_name="Count")
-        if not df_plot.empty:
-            df_plot["Gender"] = df_plot["GenderCol"].apply(lambda x: "Male" if "male" in x.lower() else "Female")
-            bar = px.bar(df_plot, x=country_col, y="Count", color="Gender", barmode="group",
-                         text="Count", color_discrete_map={"Male":"#1f77b4","Female":"#ff7f0e"},
-                         title=f"{grad_choice} ({year_sel}) — by gender and country")
-            bar.update_traces(textposition="outside")
-            bar.update_layout(plot_bgcolor=CHART_BG, paper_bgcolor=CHART_BG, font_color=TEXT_COLOR, title_x=0.5, yaxis_title="Number")
-            st.plotly_chart(bar, use_container_width=True)
 
         # Summary (no recommendation for graduates per your request)
         if not grouped.empty:
