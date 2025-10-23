@@ -40,20 +40,24 @@ st.markdown(f"""
 <div style="
     background-color:#004E8C;
     color:white;
-    padding:25px 35px;
-    border-radius:12px;
-    box-shadow:0px 3px 10px rgba(0,0,0,0.3);
+    padding:22px 30px;
+    border-radius:10px;
+    box-shadow:0 3px 10px rgba(0,0,0,0.15);
     font-family:Calibri, Arial, sans-serif;
     margin-bottom:25px;
 ">
     <div style="display:flex; align-items:center; justify-content:space-between;">
-        <div>
+        <div style="flex:1;">
             <h1 style="margin:0; font-size:28px; font-weight:600;">DBTA GP2 Job Services Officers Survey Dashboard</h1>
-            <p style="margin:5px 0 0 0; font-size:15px; color:#E5ECF6;">Baseline Analysis | Empowering Youth through Quality TVET</p>
+            <p style="margin:5px 0 0 0; font-size:15px; color:#f2f2f2;">
+                Baseline Analysis | <span style="font-style:italic;">Empowering Youth through Quality TVET</span>
+            </p>
         </div>
-        <div style="text-align:right;">
+        <div style="text-align:right; flex-shrink:0;">
             <p style="margin:0; font-size:14px; color:#ddd;">Generated on {today}</p>
-            <img src="../DonBoscoTechAfricaLogo.png" width="120" style="border-radius:8px; margin-top:6px;">
+            <div style="margin-top:5px;">
+                <img src="DonBoscoTechAfricaLogo.png" alt="DBTA Logo" width="120" style="border-radius:5px;">
+            </div>
         </div>
     </div>
 </div>
