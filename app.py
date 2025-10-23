@@ -1,271 +1,409 @@
-# ===========================================================
-# 📊 DBTA GP2 Job Services Officers Unified Survey Dashboard
-# (Smart Collaboration Analysis — Country Slicer Hidden)
+# app.py
+# DBTA GP2 Job Services Officers Unified Survey Dashboard
+# - Robust Yes/No, Rating, Collaboration (multi-select), Graduate Analysis
 # ===========================================================
 
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import date
+import re
 
-# ===========================================================
-# ⚙️ Page Setup & Theme
-# ===========================================================
 st.set_page_config(page_title="DBTA GP2 JSO Dashboard", layout="wide")
-
 today = date.today().strftime("%B %d, %Y")
 
-# ===========================================================
-# 🎨 Theme Switch
-# ===========================================================
-theme_choice = st.sidebar.radio("🌓 Select Theme", ["🌞 Light Mode", "🌙 Dark Mode"])
-
+# ---------------- Theme ----------------
+theme_choice = st.sidebar.radio("🌓 Theme", ["🌞 Light Mode", "🌙 Dark Mode"])
 if theme_choice == "🌞 Light Mode":
-    BG_COLOR = "#f5f7fa"
-    TEXT_COLOR = "#333"
-    CARD_COLOR = "#ffffff"
-    CHART_BG = "white"
-    CHART_COLOR = px.colors.qualitative.Vivid
+    BG_COLOR = "#f5f7fa"; TEXT_COLOR = "#333"; CARD_COLOR = "#ffffff"; CHART_BG = "white"; ACCENT="#0099ff"
 else:
-    BG_COLOR = "#1e1e1e"
-    TEXT_COLOR = "#f2f2f2"
-    CARD_COLOR = "#2b2b2b"
-    CHART_BG = "#2b2b2b"
-    CHART_COLOR = px.colors.qualitative.Safe
+    BG_COLOR = "#1e1e1e"; TEXT_COLOR = "#f2f2f2"; CARD_COLOR = "#2b2b2b"; CHART_BG = "#2b2b2b"; ACCENT="#66b0ff"
 
-# ===========================================================
-# 🧱 Don Bosco Header
-# ===========================================================
+# ---------------- Header ----------------
 st.markdown(f"""
-<div style="
-    background-color:#004E8C;
-    color:white;
-    padding:25px 35px;
-    border-radius:12px;
-    box-shadow:0px 3px 10px rgba(0,0,0,0.3);
-    font-family:Calibri, Arial, sans-serif;
-    margin-bottom:25px;
-">
-    <div style="display:flex; align-items:center; justify-content:space-between;">
-        <div>
-            <h1 style="margin:0; font-size:28px; font-weight:600;">DBTA GP2 Job Services Officers Survey Dashboard</h1>
-            <p style="margin:5px 0 0 0; font-size:15px; color:#E5ECF6;">Baseline Analysis | Empowering Youth through Quality TVET</p>
-        </div>
-        <div style="text-align:right;">
-            <p style="margin:0; font-size:14px; color:#ddd;">Generated on {today}</p>
-            <img src="https://tvet.dbtechafrica.org/pluginfile.php/1/core_admin/logo/0x200/1747917709/LogoRGB%20%283%29.png" width="120" style="border-radius:8px; margin-top:6px;">
-        </div>
+<div style="background-color:#004E8C;color:white;padding:22px 30px;border-radius:10px;
+            box-shadow:0 3px 10px rgba(0,0,0,0.15);font-family:Calibri, Arial, sans-serif;margin-bottom:18px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;">
+    <div>
+      <h1 style="margin:0;font-size:26px;font-weight:600;">DBTA GP2 Job Services Officers Survey Dashboard</h1>
+      <p style="margin:6px 0 0 0;font-size:13px;color:#f2f2f2;">Baseline Analysis | Empowering Youth through Quality TVET</p>
     </div>
+    <div style="text-align:right;">
+      <p style="margin:0;font-size:13px;color:#ddd;">Generated on {today}</p>
+      <img src="DonBoscoTechAfricaLogo.png" width="110" style="border-radius:6px;margin-top:6px;">
+    </div>
+  </div>
 </div>
 """, unsafe_allow_html=True)
 
-# ===========================================================
-# 📥 Load Data
-# ===========================================================
+# ---------------- Load data ----------------
 @st.cache_data
-def load_data():
-    file_path = "DBTA_GP2_Survey_JSO.xlsx"
-    df = pd.read_excel(file_path, sheet_name="Cleaned Data")
-    return df
+def load_data(path="DBTA_GP2_Survey_JSO.xlsx", sheet="Cleaned Data"):
+    return pd.read_excel(path, sheet_name=sheet)
 
-data = load_data()
-country_col = [c for c in data.columns if "country" in c.lower()][0]
+try:
+    data = load_data()
+except Exception as e:
+    st.error(f"Could not load data: {e}")
+    st.stop()
 
-# ===========================================================
-# 🧠 Detect Question Types
-# ===========================================================
+# ---------------- Identify country col ----------------
+country_candidates = [c for c in data.columns if "country" in c.lower()]
+if not country_candidates:
+    st.error("No 'Country' column found. Please check dataset column names.")
+    st.stop()
+country_col = country_candidates[0]
+
+# ---------------- Detect question types ----------------
 exclude_keywords = ["name", "respondent", "email", "phone", "id", "contact"]
-filtered_cols = [c for c in data.columns if not any(k in c.lower() for k in exclude_keywords)]
+cols_for_detection = [c for c in data.columns if not any(k in c.lower() for k in exclude_keywords)]
 
-# Detect Yes/No and Rating questions
-yes_no_cols, rating_cols = [], []
-for col in filtered_cols:
-    vals = data[col].dropna().astype(str).str.lower().unique()
-    if set(vals).issubset({'yes', 'no'}):
-        yes_no_cols.append(col)
-    else:
-        series = pd.to_numeric(data[col], errors='coerce').dropna()
-        if len(series) > 0 and series.between(1, 5).all():
-            rating_cols.append(col)
+# Yes/No detection (robust)
+yes_no_cols = []
+rating_cols = []
+for c in cols_for_detection:
+    series = data[c].dropna().astype(str).str.strip().str.lower()
+    if series.empty:
+        continue
+    unique = set(series.unique())
+    # common yes/no tokens
+    yes_tokens = {"yes", "y", "true", "1", "x", "✓", "selected", "checked"}
+    no_tokens = {"no", "n", "false", "0"}
+    # If mostly yes/no tokens -> yes/no question
+    if unique.issubset(yes_tokens.union(no_tokens).union({"", "nan", "none"})):
+        yes_no_cols.append(c)
+        continue
+    # rating detection: numeric 1-5 for a majority of non-null values
+    numeric = pd.to_numeric(data[c], errors="coerce").dropna()
+    if len(numeric) >= 0.5 * len(data[c].dropna()) and numeric.between(1,5).all():
+        rating_cols.append(c)
 
-# Detect Collaboration-type columns
+# Collaboration detection (multi-select options with bracket labels)
 collab_cols = [col for col in data.columns if "collaborate" in col.lower() and "[" in col]
 collab_labels = [col.split("[")[-1].replace("]", "").strip() for col in collab_cols]
 collab_map = dict(zip(collab_labels, collab_cols))
 
-# ===========================================================
-# 🎛️ Sidebar Filters
-# ===========================================================
-st.sidebar.header("📊 Dashboard Controls")
+# Graduate year detection and grad keyword map
+years_detected = sorted(set(re.findall(r"20\d{2}", " ".join(data.columns))), reverse=True)
+if not years_detected:
+    years_detected = ["2024","2023","2022","2021"]
 
-q_type = st.sidebar.radio(
-    "Select Data Type to Explore:",
-    ["✅ Yes/No", "⭐ Rating (1–5)", "🤝 Collaboration (Multi-Select)"]
-)
+GRAD_CATEGORY_KEYWORDS = {
+    "Number of graduates placed by the JSO": ["placed by the jso", "placed by jso", "placed by the jso in"],
+    "Number of graduates employed": ["graduates employed", "number of graduates employed", "employed in the following years"],
+    "Number of graduates self-employed": ["self-employed", "self employed", "were self-employed"]
+}
 
+# ---------------- Sidebar controls ----------------
+st.sidebar.header("📊 Controls")
+q_type = st.sidebar.radio("Select Data Type", ["✅ Yes/No", "⭐ Rating (1–5)", "🤝 Collaboration (Multi-Select)", "🎓 Graduate Analysis"])
+
+# country selector disabled for collaboration
 if q_type == "🤝 Collaboration (Multi-Select)":
-    st.sidebar.markdown("🌍 **Country selection disabled for collaboration analysis.**")
+    st.sidebar.markdown("🌍 Country selection disabled for collaboration (network-level counts).")
     country_sel = "All"
 else:
     country_list = ["All"] + sorted(data[country_col].dropna().unique().tolist())
     country_sel = st.sidebar.selectbox("🌍 Select Country", country_list)
 
+# question pickers
 if q_type == "✅ Yes/No":
-    question_list = yes_no_cols
+    question_list = yes_no_cols or ["(no yes/no questions found)"]
 elif q_type == "⭐ Rating (1–5)":
-    question_list = rating_cols
-else:
-    question_list = collab_labels
-
-question_sel = st.sidebar.selectbox("🧩 Select Question", question_list)
-
-# ===========================================================
-# ✅ YES/NO Analysis
-# ===========================================================
-if q_type == "✅ Yes/No":
-    df = data.copy() if country_sel == "All" else data[data[country_col] == country_sel]
-    total = df[question_sel].count()
-    yes_count = (df[question_sel].astype(str).str.lower() == "yes").sum()
-    no_count = (df[question_sel].astype(str).str.lower() == "no").sum()
-
-    yes_pct = round((yes_count / total) * 100, 1) if total > 0 else 0
-    no_pct = round(100 - yes_pct, 1)
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("🌍 Country", country_sel if country_sel != "All" else "All")
-    c2.metric("👥 Total Responses", total)
-    c3.metric("✅ Yes (%)", f"{yes_pct:.1f}%")
-    c4.metric("❌ No (%)", f"{no_pct:.1f}%")
-
-    fig = px.bar(
-        x=["Yes", "No"], y=[yes_count, no_count],
-        text=[f"{yes_pct:.1f}%", f"{no_pct:.1f}%"],
-        color=["Yes", "No"],
-        color_discrete_map={'Yes': '#0099ff', 'No': '#E66225'},
-        title=f"{question_sel}<br><span style='font-size:14px; color:#ccc;'>({country_sel})</span>"
-    )
-    fig.update_traces(textposition="outside", width=0.4)
-    fig.update_layout(plot_bgcolor=CHART_BG, paper_bgcolor=CHART_BG, font_color=TEXT_COLOR, title_x=0.5)
-    st.plotly_chart(fig, use_container_width=True)
-
-    if yes_pct >= 80:
-        rec = "Strong alignment with DBTA’s objectives. This area shows excellence and can be a model for replication."
-    elif 50 <= yes_pct < 80:
-        rec = "Moderate engagement. Reinforcing capacity-building, mentoring, and improved access to tools may enhance outcomes."
-    else:
-        rec = "Low engagement detected. Targeted sensitization and support are needed to raise awareness and participation."
-
-    st.markdown(f"""
-    <div style="background-color:{CARD_COLOR};border-left:6px solid #0099ff;
-    border-radius:10px;padding:18px 25px;margin-top:25px;
-    font-family:Calibri;color:{TEXT_COLOR};">
-        <h3 style="color:#0099ff;">📋 Summary</h3>
-        <p>The question <b>“{question_sel}”</b> received <b>{total}</b> responses.
-        <b>{yes_pct:.1f}%</b> answered <span style="color:#00A859;">Yes</span> and
-        <b>{no_pct:.1f}%</b> answered <span style="color:#E66225;">No</span>.</p>
-        <h3 style="color:#0099ff;">💡 Recommendation</h3>
-        <p>{rec}</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-# ===========================================================
-# ⭐ RATING (1–5) Analysis
-# ===========================================================
-elif q_type == "⭐ Rating (1–5)":
-    df = data.copy() if country_sel == "All" else data[data[country_col] == country_sel]
-    df[question_sel] = pd.to_numeric(df[question_sel], errors='coerce')
-    df = df.dropna(subset=[question_sel])
-
-    total = len(df)
-    avg_rating = round(df[question_sel].mean(), 2)
-    high_pct = round(((df[question_sel] >= 4).sum() / total) * 100, 1) if total > 0 else 0
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("🌍 Country", country_sel if country_sel != "All" else "All")
-    c2.metric("👥 Total Responses", total)
-    c3.metric("⭐ Average Rating", avg_rating)
-    c4.metric("🌟 Rated 4–5 (%)", f"{high_pct:.1f}%")
-
-    fig = px.pie(
-        df, names=question_sel, hole=0.4,
-        title=f"{question_sel}<br><span style='font-size:14px; color:#ccc;'>({country_sel})</span>",
-        color_discrete_sequence=px.colors.sequential.Blues_r if theme_choice == "🌙 Dark Mode" else px.colors.sequential.Blues
-    )
-    fig.update_traces(textinfo="percent+label")
-    fig.update_layout(plot_bgcolor=CHART_BG, paper_bgcolor=CHART_BG, font_color=TEXT_COLOR, title_x=0.5)
-    st.plotly_chart(fig, use_container_width=True)
-
-    if avg_rating >= 4:
-        rec = "High satisfaction reflects strong standards. Sustain mentorship and peer learning to maintain excellence."
-    elif 3 <= avg_rating < 4:
-        rec = "Moderate satisfaction—room for growth. Encourage practical feedback alignment."
-    else:
-        rec = "Low satisfaction signals improvement areas in training and accessibility."
-
-    st.markdown(f"""
-    <div style="background-color:{CARD_COLOR};border-left:6px solid #0099ff;
-    border-radius:10px;padding:18px 25px;margin-top:25px;
-    font-family:Calibri;color:{TEXT_COLOR};">
-        <h3 style="color:#0099ff;">📋 Summary</h3>
-        <p>{total} valid responses. Average rating: <b>{avg_rating}</b>, with <b>{high_pct:.1f}%</b> rating 4–5.</p>
-        <h3 style="color:#0099ff;">💡 Recommendation</h3>
-        <p>{rec}</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-# ===========================================================
-# 🤝 COLLABORATION (Multi-Select) Analysis
-# ===========================================================
+    question_list = rating_cols or ["(no rating questions found)"]
 elif q_type == "🤝 Collaboration (Multi-Select)":
-    col = collab_map[question_sel]
-    df = data.copy()
-    df[col] = df[col].astype(str).str.strip().str.lower()
+    question_list = collab_labels or ["(no collaboration columns found)"]
+else:
+    question_list = []
 
-    positive_values = ['yes', 'y', 'true', '1', 'x', 'selected', 'checked', '✓', '√', question_sel.lower()]
-    df_filtered = df[df[col].isin(positive_values)]
+question_sel = None
+if question_list and q_type != "🎓 Graduate Analysis":
+    question_sel = st.sidebar.selectbox("🧩 Select Question", question_list)
 
-    grouped = df_filtered.groupby(country_col).size().reset_index(name="Count")
-    if grouped.empty:
-        st.warning(f"No respondents in the dataset selected '{question_sel}'.")
+# graduate filters
+if q_type == "🎓 Graduate Analysis":
+    st.sidebar.subheader("🎓 Graduate filters")
+    year_sel = st.sidebar.selectbox("Select year", years_detected)
+    grad_choice = st.sidebar.selectbox("Select metric", list(GRAD_CATEGORY_KEYWORDS.keys()))
+    # Option to show trend across years (line chart)
+    show_trend = st.sidebar.checkbox("Show trend across years", value=True)
+
+# ---------------- utility: summary card ----------------
+def summary_card(title, html, accent=ACCENT):
+    st.markdown(f"""
+    <div style="background-color:{CARD_COLOR};border-left:6px solid {accent};
+                border-radius:10px;padding:16px 20px;margin-top:18px;font-family:Calibri;color:{TEXT_COLOR};">
+      <h3 style="color:{accent};margin-top:0;">{title}</h3>
+      {html}
+    </div>""", unsafe_allow_html=True)
+
+# ---------------- Yes/No logic ----------------
+if q_type == "✅ Yes/No":
+    if not yes_no_cols:
+        st.warning("No yes/no questions detected.")
+    elif question_sel not in yes_no_cols:
+        st.warning("Pick a valid Yes/No question.")
     else:
-        fig = px.bar(
-            grouped, x=country_col, y="Count", text="Count",
-            color=country_col, color_discrete_sequence=CHART_COLOR,
-            title=f"Respondents Selecting “{question_sel}”<br><span style='font-size:14px; color:#555;'>(All Countries)</span>"
-        )
-        fig.update_traces(textposition="outside", marker_line_color="white", marker_line_width=1.3)
-        fig.update_layout(title_x=0.5, plot_bgcolor=CHART_BG, paper_bgcolor=CHART_BG, font_color=TEXT_COLOR)
+        df = data.copy() if country_sel == "All" else data.loc[data[country_col]==country_sel].copy()
+        s = df[question_sel].astype(str).str.strip().str.lower()
+        yes_mask = s.isin(["yes","y","true","1","x","✓","selected","checked"])
+        no_mask = s.isin(["no","n","false","0"])
+        other_mask = s.notna() & ~(yes_mask | no_mask)
+
+        yes_count = int(yes_mask.sum())
+        no_count = int(no_mask.sum())
+        other_count = int(other_mask.sum())
+        total = int(s.notna().sum())
+
+        yes_pct = round(yes_count/total*100,1) if total>0 else 0.0
+        no_pct  = round(no_count/total*100,1) if total>0 else 0.0
+        other_pct = round(other_count/total*100,1) if total>0 else 0.0
+
+        # KPIs
+        c1,c2,c3,c4 = st.columns(4)
+        c1.metric("🌍 Country", country_sel if country_sel!="All" else "All")
+        c2.metric("👥 Responses", total)
+        c3.metric("✅ Yes (%)", f"{yes_pct:.1f}%")
+        c4.metric("❌ No (%)", f"{no_pct:.1f}%")
+
+        plot_df = pd.DataFrame({
+            "Response":["Yes","No","Other"],
+            "Count":[yes_count,no_count,other_count],
+            "Pct":[yes_pct,no_pct,other_pct]
+        }).query("Count>0")
+
+        fig = px.bar(plot_df, x="Response", y="Count", text="Pct", color="Response",
+                     color_discrete_map={"Yes":"#0099ff","No":"#E66225","Other":"#6c757d"},
+                     title=f"{question_sel} — {country_sel}")
+        fig.update_traces(texttemplate="%{text:.1f}%", textposition="outside", marker_line_color="white")
+        fig.update_layout(plot_bgcolor=CHART_BG, paper_bgcolor=CHART_BG, font_color=TEXT_COLOR, title_x=0.5)
         st.plotly_chart(fig, use_container_width=True)
 
-        total_resp = grouped["Count"].sum()
-        top_country = grouped.sort_values("Count", ascending=False).iloc[0][country_col]
-        top_count = grouped.sort_values("Count", ascending=False).iloc[0]["Count"]
-
-        if total_resp >= 15:
-            reco = f"Strong collaboration across regions. {top_country} leads in <b>{question_sel.lower()}</b>. DBTA should replicate their model regionally."
-        elif 5 <= total_resp < 15:
-            reco = f"Moderate adoption of <b>{question_sel.lower()}</b>. Promote structured peer exchanges and policy incentives."
+        # Professional summary + recommendation
+        if yes_pct >= 80:
+            rec = ("The large majority indicate affirmative — this suggests strong adoption or awareness. "
+                   "Document current practices, share them across the network and monitor continuity.")
+        elif yes_pct >= 50:
+            rec = ("A mixed picture: there is uptake but it is not universal. Recommend targeted follow-up "
+                   "training, monthly check-ins, and distribution of quick reference materials.")
         else:
-            reco = f"Limited engagement in <b>{question_sel.lower()}</b>. Conduct sensitization sessions and follow-up assessments."
+            rec = ("Low adoption/awareness. Execute root-cause diagnostics (focus groups, calls), then design "
+                   "targeted capacity-building sessions and easy-to-use job aids.")
 
-        st.markdown(f"""
-        <div style="background-color:{CARD_COLOR};border-left:6px solid #0099ff;
-        border-radius:10px;padding:18px 25px;margin-top:25px;
-        font-family:Calibri;color:{TEXT_COLOR};">
-            <h3 style="color:#0099ff;">📋 Summary</h3>
-            <p>The collaboration area <b>“{question_sel}”</b> was reported by <b>{total_resp}</b> respondents across all countries.
-            <b>{top_country}</b> leads with <b>{top_count}</b> mentions.</p>
-            <h3 style="color:#0099ff;">💡 Recommendation</h3>
-            <p>{reco}</p>
-        </div>
-        """, unsafe_allow_html=True)
+        body = (f"<p><b>{total}</b> responses examined. <b>{yes_count}</b> answered <b>Yes</b> ({yes_pct:.1f}%), "
+                f"<b>{no_count}</b> answered <b>No</b> ({no_pct:.1f}%).</p>"
+                f"<h4>💡 Recommendation</h4><p>{rec}</p>")
+        summary_card("📋 Summary & Recommendation", body)
 
-# ===========================================================
-# 🧭 Footer
-# ===========================================================
+# ---------------- Rating logic ----------------
+elif q_type == "⭐ Rating (1–5)":
+    if not rating_cols:
+        st.warning("No rating (1–5) questions detected.")
+    elif question_sel not in rating_cols:
+        st.warning("Pick a valid rating question.")
+    else:
+        df = data.copy() if country_sel == "All" else data.loc[data[country_col]==country_sel].copy()
+        df.loc[:, question_sel] = pd.to_numeric(df[question_sel], errors="coerce")
+        df_valid = df.dropna(subset=[question_sel]).copy()
+        total = len(df_valid)
+        if total == 0:
+            st.info("No numeric ratings available for this question/country.")
+        else:
+            avg = round(float(df_valid[question_sel].mean()),2)
+            median = round(float(df_valid[question_sel].median()),2)
+            pct_4_5 = round((df_valid[question_sel] >= 4).sum()/total*100,1)
+
+            c1,c2,c3,c4 = st.columns(4)
+            c1.metric("🌍 Country", country_sel if country_sel!="All" else "All")
+            c2.metric("👥 Valid responses", total)
+            c3.metric("⭐ Average", avg)
+            c4.metric("🌟 4–5 (%)", f"{pct_4_5:.1f}%")
+
+            counts = df_valid[question_sel].astype(int).value_counts().sort_index()
+            donut = px.pie(names=counts.index.astype(str), values=counts.values, hole=0.45,
+                           title=f"{question_sel} — {country_sel}",
+                           color_discrete_sequence=px.colors.sequential.Blues_r if theme_choice=="🌙 Dark Mode" else px.colors.sequential.Blues)
+            donut.update_traces(textinfo="percent+label")
+            donut.update_layout(plot_bgcolor=CHART_BG, paper_bgcolor=CHART_BG, font_color=TEXT_COLOR, title_x=0.5)
+            st.plotly_chart(donut, use_container_width=True)
+
+            # nuanced professional summary + recommendation
+            if avg >= 4:
+                rec = ("Strong satisfaction indicator. Capture local case studies, sustain current approaches, "
+                       "and set up periodic peer-sharing sessions.")
+            elif avg >= 3:
+                rec = ("Moderate satisfaction. Use targeted qualitative follow-up (open-ended, interviews) to "
+                       "identify the most actionable improvements.")
+            else:
+                rec = ("Low satisfaction. Convene a focused working group, review curriculum/delivery, "
+                       "and prioritize the top 3 interventions for immediate rollout.")
+
+            body = (f"<p><b>{total}</b> valid ratings. Average: <b>{avg}</b>; median: <b>{median}</b>. "
+                    f"<b>{pct_4_5:.1f}%</b> rated 4 or 5.</p>"
+                    f"<h4>💡 Recommendation</h4><p>{rec}</p>")
+            summary_card("📋 Summary & Recommendation", body)
+
+# ---------------- Collaboration logic ----------------
+elif q_type == "🤝 Collaboration (Multi-Select)":
+    if not collab_labels:
+        st.warning("No collaboration multi-select columns detected (columns normally include option in brackets).")
+    elif question_sel not in collab_labels:
+        st.warning("Choose a collaboration option.")
+    else:
+        st.info("Collaboration analysis is shown network-wide (country filter disabled).")
+        col = collab_map.get(question_sel)
+        if col is None:
+            st.warning("Mapping error for collaboration option.")
+        else:
+            df = data.copy()
+            df.loc[:, col] = df[col].astype(str).str.strip().str.lower()
+            positives = {"yes","y","true","1","x","selected","checked","✓","√", question_sel.lower()}
+            df_filtered = df[df[col].isin(positives)].copy()
+            # fallback: contains match (free text)
+            if df_filtered.empty:
+                mask = df[col].astype(str).str.lower().str.contains(question_sel.lower(), na=False)
+                df_filtered = df[mask].copy()
+
+            if df_filtered.empty:
+                st.warning(f"No respondents selected '{question_sel}'.")
+            else:
+                grouped = df_filtered.groupby(country_col).size().reset_index(name="Count").sort_values("Count", ascending=False)
+                fig = px.bar(grouped, x=country_col, y="Count", text="Count", color=country_col, color_discrete_sequence=px.colors.qualitative.Vivid,
+                             title=f"Respondents selecting “{question_sel}” — All countries")
+                fig.update_traces(textposition="outside", marker_line_color="white")
+                fig.update_layout(plot_bgcolor=CHART_BG, paper_bgcolor=CHART_BG, font_color=TEXT_COLOR, title_x=0.5)
+                st.plotly_chart(fig, use_container_width=True)
+
+                total_resp = int(grouped["Count"].sum())
+                top_country = grouped.iloc[0][country_col]
+                top_count = int(grouped.iloc[0]["Count"])
+
+                if total_resp >= 30:
+                    rec = (f"High adoption (n={total_resp}). Capture how {top_country} operationalises '{question_sel}' and create "
+                           "a short practical guide for replication.")
+                elif total_resp >= 10:
+                    rec = (f"Moderate adoption (n={total_resp}). Boost peer learning and provide implementation templates.")
+                else:
+                    rec = (f"Low adoption (n={total_resp}). Run focused awareness and short practical workshops.")
+
+                body = (f"<p><b>{total_resp}</b> respondents reported <b>{question_sel}</b>. "
+                        f"Top country: <b>{top_country}</b> ({top_count}).</p>"
+                        f"<h4>💡 Recommendation</h4><p>{rec}</p>")
+                summary_card("📋 Collaboration Summary", body)
+
+# ---------------- Graduate Analysis ----------------
+elif q_type == "🎓 Graduate Analysis":
+    # find male/female column names for chosen metric and years
+    keywords = GRAD_CATEGORY_KEYWORDS[grad_choice]
+    cols_lower = {c: c.lower() for c in data.columns}
+
+    # find candidate columns that include year_sel & gender token & any keyword
+    male_col = female_col = None
+    for c, lower in cols_lower.items():
+        if year_sel in lower and "male" in lower and any(k in lower for k in keywords):
+            male_col = c if male_col is None else male_col
+        if year_sel in lower and "female" in lower and any(k in lower for k in keywords):
+            female_col = c if female_col is None else female_col
+
+    # fallback: try partial matches (year present and 'male'/'female' token)
+    if not male_col or not female_col:
+        for c, lower in cols_lower.items():
+            if year_sel in lower and "male" in lower and male_col is None:
+                male_col = c
+            if year_sel in lower and "female" in lower and female_col is None:
+                female_col = c
+
+    if not male_col or not female_col:
+        st.warning(f"Could not find male/female columns for '{grad_choice}' in {year_sel}. Check column names.")
+    else:
+        # filter by country if applicable
+        df = data.copy() if country_sel == "All" else data.loc[data[country_col]==country_sel].copy()
+        # coerce to numeric and avoid SettingWithCopy by assigning with .loc
+        df.loc[:, male_col] = pd.to_numeric(df[male_col], errors="coerce").fillna(0).astype(int)
+        df.loc[:, female_col] = pd.to_numeric(df[female_col], errors="coerce").fillna(0).astype(int)
+
+        grouped = df.groupby(country_col)[[male_col, female_col]].sum().reset_index()
+        grouped["Total"] = grouped[male_col] + grouped[female_col]
+
+        total_male = int(grouped[male_col].sum())
+        total_female = int(grouped[female_col].sum())
+        total_all = total_male + total_female
+        male_pct = round(total_male/total_all*100,1) if total_all else 0.0
+        female_pct = round(total_female/total_all*100,1) if total_all else 0.0
+
+        # KPIs
+        c1,c2,c3,c4 = st.columns(4)
+        c1.metric("🌍 Country", country_sel if country_sel!="All" else "All")
+        c2.metric("👥 Total graduates", f"{total_all:,}")
+        c3.metric("👨 Male (%)", f"{male_pct:.1f}%")
+        c4.metric("👩 Female (%)", f"{female_pct:.1f}%")
+
+        # PIE chart for gender split (network or selected country)
+        pie_df = pd.DataFrame({"Gender":["Male","Female"], "Count":[total_male, total_female]}).query("Count>0")
+        if not pie_df.empty:
+            pie = px.pie(pie_df, names="Gender", values="Count", hole=0.4,
+                         color_discrete_map={"Male":"#1f77b4","Female":"#ff7f0e"},
+                         title=f"{grad_choice} ({year_sel}) — Gender split")
+            pie.update_traces(textinfo="percent+label")
+            pie.update_layout(plot_bgcolor=CHART_BG, paper_bgcolor=CHART_BG, font_color=TEXT_COLOR, title_x=0.5)
+            st.plotly_chart(pie, use_container_width=True)
+
+        # Trend line across years (aggregate by year) - only if show_trend checked
+        # We'll attempt to locate columns for the same grad_choice across multiple years
+        if show_trend:
+            # build list of years present (use detected years)
+            trend_years = years_detected.copy()
+            trend_rows = []
+            for y in trend_years:
+                # locate male/female columns for year y and current grad_choice
+                m_col = fcol = None
+                for c, lower in cols_lower.items():
+                    if y in lower and "male" in lower and any(k in lower for k in GRAD_CATEGORY_KEYWORDS[grad_choice]):
+                        m_col = c
+                    if y in lower and "female" in lower and any(k in lower for k in GRAD_CATEGORY_KEYWORDS[grad_choice]):
+                        f_col = c
+                # fallback by broader search
+                if m_col is None or f_col is None:
+                    for c, lower in cols_lower.items():
+                        if y in lower and "male" in lower and m_col is None:
+                            m_col = c
+                        if y in lower and "female" in lower and f_col is None:
+                            f_col = c
+                if m_col and f_col:
+                    m_sum = pd.to_numeric(data[m_col], errors="coerce").fillna(0).sum()
+                    f_sum = pd.to_numeric(data[f_col], errors="coerce").fillna(0).sum()
+                    trend_rows.append({"Year": y, "Male": int(m_sum), "Female": int(f_sum), "Total": int(m_sum + f_sum)})
+            if trend_rows:
+                trend_df = pd.DataFrame(trend_rows).sort_values("Year")
+                # line for totals
+                line = px.line(trend_df, x="Year", y="Total", markers=True, title=f"Trend — {grad_choice} (Total) across years")
+                line.update_layout(plot_bgcolor=CHART_BG, paper_bgcolor=CHART_BG, font_color=TEXT_COLOR, title_x=0.5)
+                st.plotly_chart(line, use_container_width=True)
+
+        # bar by country stacked/grouped if many countries
+        df_plot = grouped.melt(id_vars=[country_col], value_vars=[male_col, female_col], var_name="GenderCol", value_name="Count")
+        if not df_plot.empty:
+            df_plot["Gender"] = df_plot["GenderCol"].apply(lambda x: "Male" if "male" in x.lower() else "Female")
+            bar = px.bar(df_plot, x=country_col, y="Count", color="Gender", barmode="group",
+                         text="Count", color_discrete_map={"Male":"#1f77b4","Female":"#ff7f0e"},
+                         title=f"{grad_choice} ({year_sel}) — by gender and country")
+            bar.update_traces(textposition="outside")
+            bar.update_layout(plot_bgcolor=CHART_BG, paper_bgcolor=CHART_BG, font_color=TEXT_COLOR, title_x=0.5, yaxis_title="Number")
+            st.plotly_chart(bar, use_container_width=True)
+
+        # Summary (no recommendation for graduates per your request)
+        if not grouped.empty:
+            top = grouped.sort_values("Total", ascending=False).iloc[0]
+            top_country = top[country_col]
+            top_total = int(top["Total"])
+            body = (f"<p>For <b>{grad_choice}</b> in <b>{year_sel}</b>, total <b>{total_all:,}</b> graduates "
+                    f"(<b>{total_male:,}</b> male; <b>{total_female:,}</b> female). Top country: <b>{top_country}</b> ({top_total:,}).</p>")
+            summary_card("📋 Graduate Summary", body)
+
+# ---------------- Footer ----------------
 st.markdown(f"""
-<br><div style="background-color:#004E8C;color:white;padding:12px;
-border-radius:8px;text-align:center;font-family:Calibri;margin-top:40px;font-size:14px;">
+<br><div style="background-color:#004E8C;color:white;padding:12px;border-radius:8px;
+text-align:center;font-family:Calibri;margin-top:28px;font-size:13px;">
 © Don Bosco Tech Africa | Data Analytics & Research Unit
 </div>
 """, unsafe_allow_html=True)
