@@ -81,7 +81,7 @@ filtered_cols = [c for c in data.columns if not any(k in c.lower() for k in excl
 yes_no_cols, rating_cols = [], []
 for col in filtered_cols:
     vals = data[col].dropna().astype(str).str.lower().unique()
-    if set(vals).issubset({'yes', 'no'}):
+    if set(vals).issubset({'yes', 'no', 'I don't know'}):
         yes_no_cols.append(col)
     else:
         series = pd.to_numeric(data[col], errors='coerce').dropna()
@@ -100,7 +100,7 @@ st.sidebar.header("📊 Dashboard Controls")
 
 q_type = st.sidebar.radio(
     "Select Data Type to Explore:",
-    ["✅ Yes/No", "⭐ Rating (1–5)", "🤝 Collaboration (Multi-Select)"]
+    ["✅ Yes/No/I don't know", "⭐ Rating (1–5)", "🤝 Collaboration (Multi-Select)"]
 )
 
 if q_type == "🤝 Collaboration (Multi-Select)":
@@ -110,7 +110,7 @@ else:
     country_list = ["All"] + sorted(data[country_col].dropna().unique().tolist())
     country_sel = st.sidebar.selectbox("🌍 Select Country", country_list)
 
-if q_type == "✅ Yes/No":
+if q_type == "✅ Yes/No/I don't know":
     question_list = yes_no_cols
 elif q_type == "⭐ Rating (1–5)":
     question_list = rating_cols
@@ -122,7 +122,7 @@ question_sel = st.sidebar.selectbox("🧩 Select Question", question_list)
 # ===========================================================
 # ✅ YES/NO Analysis
 # ===========================================================
-if q_type == "✅ Yes/No":
+if q_type == "✅ Yes/No/I don't know":
     df = data.copy() if country_sel == "All" else data[data[country_col] == country_sel]
     total = df[question_sel].count()
     yes_count = (df[question_sel].astype(str).str.lower() == "yes").sum()
@@ -136,12 +136,13 @@ if q_type == "✅ Yes/No":
     c2.metric("👥 Total Responses", total)
     c3.metric("✅ Yes (%)", f"{yes_pct:.1f}%")
     c4.metric("❌ No (%)", f"{no_pct:.1f}%")
+    c5.metric("❌ I don't know (%)", f"{no_pct:.1f}%")
 
     fig = px.bar(
-        x=["Yes", "No"], y=[yes_count, no_count],
+        x=["Yes", "No", "I don't know"], y=[yes_count, no_count, I_don't_know],
         text=[f"{yes_pct:.1f}%", f"{no_pct:.1f}%"],
-        color=["Yes", "No"],
-        color_discrete_map={'Yes': '#0099ff', 'No': '#E66225'},
+        color=["Yes", "No", "I don't know"],
+        color_discrete_map={'Yes': '#0099ff', 'No': '#E66225', 'I don't know': '#E66225'},
         title=f"{question_sel}<br><span style='font-size:14px; color:#ccc;'>({country_sel})</span>"
     )
     fig.update_traces(textposition="outside", width=0.4)
