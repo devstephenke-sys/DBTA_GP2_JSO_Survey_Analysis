@@ -1,18 +1,18 @@
 # ===========================================================
 # 📊 DBTA GP2 Job Services Officers Unified Survey Dashboard
-# (with robust Collaboration / Multi-Select behavior)
+# (Smart Collaboration Analysis — Country Slicer Hidden)
 # ===========================================================
 
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import date
-import re
 
 # ===========================================================
 # ⚙️ Page Setup & Theme
 # ===========================================================
 st.set_page_config(page_title="DBTA GP2 JSO Dashboard", layout="wide")
+
 today = date.today().strftime("%B %d, %Y")
 
 # ===========================================================
@@ -72,11 +72,12 @@ data = load_data()
 country_col = [c for c in data.columns if "country" in c.lower()][0]
 
 # ===========================================================
-# 🧠 Detect Question Types (Yes/No, Rating, Collaboration)
+# 🧠 Detect Question Types
 # ===========================================================
 exclude_keywords = ["name", "respondent", "email", "phone", "id", "contact"]
 filtered_cols = [c for c in data.columns if not any(k in c.lower() for k in exclude_keywords)]
 
+# Detect Yes/No and Rating questions
 yes_no_cols, rating_cols = [], []
 for col in filtered_cols:
     vals = data[col].dropna().astype(str).str.lower().unique()
@@ -87,61 +88,10 @@ for col in filtered_cols:
         if len(series) > 0 and series.between(1, 5).all():
             rating_cols.append(col)
 
-# Collaboration detection:
-# Two possible patterns in your dataset:
-# 1) multiple columns where column name contains the option (with bracket label)
-# 2) a single multi-select column (cells contain "opt1; opt2" etc.)
-# We'll try to detect both.
-collab_cols_multi = []      # columns that are single multi-select (contain separators)
-collab_cols_yesno = []      # columns that are per-option yes/no (contain bracket labels or option text)
-
-# heuristics: if a column contains separators like ';' or ',' it's likely multi-select single-column
-sep_pattern = re.compile(r"[;,/|]")
-
-for col in data.columns:
-    sample = data[col].dropna().astype(str).head(200).str.lower()
-    if sample.str.contains(sep_pattern).any():
-        # treat as multi-select single column
-        collab_cols_multi.append(col)
-    # identify per-option columns (e.g. columns containing '[' or known option text)
-    if ("collaborate" in col.lower() and "[" in col) or ("collaborate" in col.lower() and "choose all" in col.lower()):
-        collab_cols_yesno.append(col)
-
-# For per-option yes/no columns, derive readable labels if they include bracket text
-collab_labels_yesno = []
-collab_map_yesno = {}
-for col in collab_cols_yesno:
-    # try to extract the bracket label e.g. "... [Sharing best practices]" -> "Sharing best practices"
-    m = re.search(r"\[([^\]]+)\]", col)
-    label = (m.group(1).strip() if m else col).strip()
-    collab_labels_yesno.append(label)
-    collab_map_yesno[label] = col
-
-# For multi-select single columns, create labels by sampling unique options
-collab_labels_multi = []
-collab_map_multi = {}
-for col in collab_cols_multi:
-    # extract distinct options from sample rows
-    opts = (
-        data[col].dropna().astype(str)
-        .str.split(sep_pattern)
-        .explode()
-        .str.strip()
-        .str.lower()
-        .value_counts()
-    )
-    # pick top N options as labels (store lowercase keys)
-    labels = opts.index.tolist()[:20]
-    for lab in labels:
-        label_display = lab.title()
-        collab_labels_multi.append(label_display)
-        collab_map_multi[label_display] = (col, lab)  # store (column, canonical option lowercase)
-
-# unify labels and mapping for sidebar selection
-collab_labels = collab_labels_yesno + collab_labels_multi
-collab_map = {}
-collab_map.update(collab_map_yesno)   # maps label -> col (yes/no column)
-collab_map.update(collab_map_multi)    # maps label -> (col, option_lower)
+# Detect Collaboration-type columns
+collab_cols = [col for col in data.columns if "collaborate" in col.lower() and "[" in col]
+collab_labels = [col.split("[")[-1].replace("]", "").strip() for col in collab_cols]
+collab_map = dict(zip(collab_labels, collab_cols))
 
 # ===========================================================
 # 🎛️ Sidebar Filters
@@ -152,21 +102,25 @@ q_type = st.sidebar.radio(
     "Select Data Type to Explore:",
     ["✅ Yes/No", "⭐ Rating (1–5)", "🤝 Collaboration (Multi-Select)"]
 )
-country_list = ["All"] + sorted(data[country_col].dropna().unique().tolist())
-country_sel = st.sidebar.selectbox("🌍 Select Country", country_list)
+
+if q_type == "🤝 Collaboration (Multi-Select)":
+    st.sidebar.markdown("🌍 **Country selection disabled for collaboration analysis.**")
+    country_sel = "All"
+else:
+    country_list = ["All"] + sorted(data[country_col].dropna().unique().tolist())
+    country_sel = st.sidebar.selectbox("🌍 Select Country", country_list)
 
 if q_type == "✅ Yes/No":
     question_list = yes_no_cols
 elif q_type == "⭐ Rating (1–5)":
     question_list = rating_cols
 else:
-    # if no collaboration labels found, fallback to reasonable default string
-    question_list = collab_labels if collab_labels else ["In what ways do Don Bosco TVET centres collaborate?"]
+    question_list = collab_labels
 
-question_sel = st.sidebar.selectbox("🧩 Select Question / Collaboration Option", question_list)
+question_sel = st.sidebar.selectbox("🧩 Select Question", question_list)
 
 # ===========================================================
-# ✅ YES/NO Analysis (unchanged)
+# ✅ YES/NO Analysis
 # ===========================================================
 if q_type == "✅ Yes/No":
     df = data.copy() if country_sel == "All" else data[data[country_col] == country_sel]
@@ -174,7 +128,7 @@ if q_type == "✅ Yes/No":
     yes_count = (df[question_sel].astype(str).str.lower() == "yes").sum()
     no_count = (df[question_sel].astype(str).str.lower() == "no").sum()
 
-    yes_pct = round((yes_count / total) * 100, 1) if total > 0 else 0.0
+    yes_pct = round((yes_count / total) * 100, 1) if total > 0 else 0
     no_pct = round(100 - yes_pct, 1)
 
     c1, c2, c3, c4 = st.columns(4)
@@ -215,7 +169,7 @@ if q_type == "✅ Yes/No":
     """, unsafe_allow_html=True)
 
 # ===========================================================
-# ⭐ RATING (1–5) Analysis (unchanged)
+# ⭐ RATING (1–5) Analysis
 # ===========================================================
 elif q_type == "⭐ Rating (1–5)":
     df = data.copy() if country_sel == "All" else data[data[country_col] == country_sel]
@@ -260,93 +214,47 @@ elif q_type == "⭐ Rating (1–5)":
     """, unsafe_allow_html=True)
 
 # ===========================================================
-# 🤝 COLLABORATION (Multi-Select) Analysis — NEW LOGIC
+# 🤝 COLLABORATION (Multi-Select) Analysis
 # ===========================================================
 elif q_type == "🤝 Collaboration (Multi-Select)":
-    # NOTE: For collaboration we IGNORE the country_sel filter and always show counts across all countries.
-    st.info("Country filter is ignored for Collaboration analysis. Showing counts across all countries for the selected collaboration option.")
-
-    # Determine whether the selected label maps to a yes/no column or a multi-select column+option
-    mapping = collab_map.get(question_sel)
-
-    # Prepare dataframe copy and normalize country
+    col = collab_map[question_sel]
     df = data.copy()
-    df[country_col] = df[country_col].astype(str).str.strip()
+    df[col] = df[col].astype(str).str.strip().str.lower()
 
-    # boolean mask of respondents who selected the chosen collaboration option
-    if mapping is None:
-        # fallback: try to search the text across all columns for that label string
-        target_lower = question_sel.lower()
-        mask = df.apply(lambda row: row.astype(str).str.lower().str.contains(target_lower).any(), axis=1)
-    else:
-        # mapping can be either:
-        # - a column name string (yes/no column), or
-        # - a tuple (col, option_lower) for multi-select single column
-        if isinstance(mapping, str):
-            col = mapping
-            # normalize values and test membership in positive set
-            positive_values = {'yes','y','true','1','x','selected','checked','✓','√'}
-            mask = df[col].astype(str).str.strip().str.lower().isin(positive_values)
-        else:
-            # mapping is (col, option_lower)
-            col, option_lower = mapping
-            # handle single-cell multi-select: split by separators and match option_lower
-            def row_has_option(val):
-                if pd.isna(val):
-                    return False
-                parts = re.split(r"[;,/|]", str(val))
-                parts = [p.strip().lower() for p in parts if p.strip()]
-                return option_lower in parts
-            mask = df[col].apply(row_has_option)
+    positive_values = ['yes', 'y', 'true', '1', 'x', 'selected', 'checked', '✓', '√', question_sel.lower()]
+    df_filtered = df[df[col].isin(positive_values)]
 
-    # Now group by country for counts (we use all countries)
-    grouped = df[mask].groupby(country_col).size().reset_index(name="Count")
-    # Ensure countries with zero are not shown (we want only countries that have selected the option)
-    grouped = grouped.sort_values("Count", ascending=False)
-
-    # If no respondents found
+    grouped = df_filtered.groupby(country_col).size().reset_index(name="Count")
     if grouped.empty:
-        st.warning(f"No respondents in the entire dataset selected '{question_sel}'.")
+        st.warning(f"No respondents in the dataset selected '{question_sel}'.")
     else:
-        # Bar chart across all countries (country_sel ignored)
         fig = px.bar(
             grouped, x=country_col, y="Count", text="Count",
             color=country_col, color_discrete_sequence=CHART_COLOR,
-            title=f"Respondents Selecting “{question_sel}” — All Countries"
+            title=f"Respondents Selecting “{question_sel}”<br><span style='font-size:14px; color:#555;'>(All Countries)</span>"
         )
         fig.update_traces(textposition="outside", marker_line_color="white", marker_line_width=1.3)
-        fig.update_layout(plot_bgcolor=CHART_BG, paper_bgcolor=CHART_BG, font_color=TEXT_COLOR, title_x=0.5)
+        fig.update_layout(title_x=0.5, plot_bgcolor=CHART_BG, paper_bgcolor=CHART_BG, font_color=TEXT_COLOR)
         st.plotly_chart(fig, use_container_width=True)
 
-        # Summary + collaboration-specific recommendation
-        total_resp = int(grouped["Count"].sum())
-        top_row = grouped.iloc[0]
-        top_country = top_row[country_col]
-        top_count = int(top_row["Count"])
+        total_resp = grouped["Count"].sum()
+        top_country = grouped.sort_values("Count", ascending=False).iloc[0][country_col]
+        top_count = grouped.sort_values("Count", ascending=False).iloc[0]["Count"]
 
-        # Collaboration-specific messaging (different thresholds & tone)
-        if total_resp >= 30:
-            reco = (
-                f"High adoption of <b>{question_sel}</b> across the network (n={total_resp}). "
-                f"{top_country} leads with {top_count} mentions — consider documenting their approach and hosting a regional exchange."
-            )
-        elif 10 <= total_resp < 30:
-            reco = (
-                f"Moderate adoption of <b>{question_sel}</b> (n={total_resp}). "
-                "Opportunity to strengthen this collaboration by organizing targeted peer-learning sessions and sharing resource packs."
-            )
+        if total_resp >= 15:
+            reco = f"Strong collaboration across regions. {top_country} leads in <b>{question_sel.lower()}</b>. DBTA should replicate their model regionally."
+        elif 5 <= total_resp < 15:
+            reco = f"Moderate adoption of <b>{question_sel.lower()}</b>. Promote structured peer exchanges and policy incentives."
         else:
-            reco = (
-                f"Low adoption of <b>{question_sel}</b> (n={total_resp}). "
-                "Recommend targeted outreach, brief case studies showcasing benefits, and quick-start guidance to encourage uptake."
-            )
+            reco = f"Limited engagement in <b>{question_sel.lower()}</b>. Conduct sensitization sessions and follow-up assessments."
 
         st.markdown(f"""
         <div style="background-color:{CARD_COLOR};border-left:6px solid #0099ff;
-        border-radius:10px;padding:18px 25px;margin-top:25px;font-family:Calibri;color:{TEXT_COLOR};">
-            <h3 style="color:#0099ff;">📋 Collaboration Summary</h3>
-            <p><b>{total_resp}</b> respondents reported <b>{question_sel}</b> across the network.
-            The country with the highest mentions is <b>{top_country}</b> ({top_count}).</p>
+        border-radius:10px;padding:18px 25px;margin-top:25px;
+        font-family:Calibri;color:{TEXT_COLOR};">
+            <h3 style="color:#0099ff;">📋 Summary</h3>
+            <p>The collaboration area <b>“{question_sel}”</b> was reported by <b>{total_resp}</b> respondents across all countries.
+            <b>{top_country}</b> leads with <b>{top_count}</b> mentions.</p>
             <h3 style="color:#0099ff;">💡 Recommendation</h3>
             <p>{reco}</p>
         </div>
