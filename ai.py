@@ -46,7 +46,7 @@ st.markdown(f"""
 
 # ---------------- Load data ----------------
 @st.cache_data
-def load_data(path="DBTA_GP2_Survey_JSO.xlsx", sheet="Cleaned Data"):
+def load_data(path="data/DBTA_GP2_Survey_JSO.xlsx", sheet="Cleaned Data"):
     return pd.read_excel(path, sheet_name=sheet)
 
 try:
@@ -187,10 +187,35 @@ if ai_mode:
         """Send a prompt (and optional dataframe context) to Gemini API and return insight."""
         base_prompt = (
             "You are Stephen AI, a professional data analyst assistant. "
-            "Provide clear, actionable insights, and charts e.g., actual pie, bar, or line charts — directly in the dashboard based on the user's request. "
+            "Provide clear, actionable insights (no charts) based on the user's request. "
             "If a dataset is provided, summarize patterns, correlations, or key findings in bullet points. "
-            "Always be concise and label the insights as 'Findings' and 'Recommendations' when suitable.")
-            
+            "Always be concise and label the insights as 'Findings' and 'Recommendations' when suitable."
+            "Create a donloadable link pdf file for user to download"
+            "File: data/DBTA_GP2_Survey_JSO.xlsx"
+        )
+        if df is not None:
+            # attach small sample for context (first N rows)
+            sample_csv = df.head(10).to_csv(index=False)
+            base_prompt += "\n\nHere is a preview of the dataset (first 10 rows):\n" + sample_csv
+
+        payload = {"contents": [{"parts": [{"text": base_prompt + "\n\nUser question:\n" + prompt_text}]}]}
+        url = f"https://generativelanguage.googleapis.com/v1beta/{selected_model}:generateContent?key={api_key}"
+
+        headers = {"Content-Type": "application/json"}
+        try:
+            response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=60)
+        except Exception as e:
+            return f"Error connecting to AI: {e}"
+        if response.status_code == 200:
+            result = response.json()
+            # try multiple keys to be robust
+            try:
+                return result.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+            except Exception:
+                return json.dumps(result)
+        else:
+            return f"API error: {response.status_code} - {response.text}"
+
     # Main AI panel
     st.markdown(f"""
     <div style="background-color:{CARD_COLOR};border-radius:10px;padding:18px;margin-top:6px;font-family:Calibri;color:{TEXT_COLOR};
@@ -474,17 +499,17 @@ else:
                     st.plotly_chart(line, use_container_width=True)
                     charts_for_export.append({"fig": line, "caption": f"Trend — {grad_choice} (Total) across years"})
 
-            # bar by country stacked/grouped if many countries
-            df_plot = grouped.melt(id_vars=[country_col], value_vars=[male_col, female_col], var_name="GenderCol", value_name="Count")
-            if not df_plot.empty:
-                df_plot["Gender"] = df_plot["GenderCol"].apply(lambda x: "Male" if "male" in x.lower() else "Female")
-                bar = px.bar(df_plot, x=country_col, y="Count", color="Gender", barmode="group",
-                             text="Count", color_discrete_map={"Male":"#1f77b4","Female":"#ff7f0e"},
-                             title=f"{grad_choice} ({year_sel}) — by gender and country")
-                bar.update_traces(textposition="outside")
-                bar.update_layout(plot_bgcolor=CHART_BG, paper_bgcolor=CHART_BG, font_color=TEXT_COLOR, title_x=0.5, yaxis_title="Number")
-                st.plotly_chart(bar, use_container_width=True)
-                charts_for_export.append({"fig": bar, "caption": f"{grad_choice} ({year_sel}) — by gender and country"})
+            # # bar by country stacked/grouped if many countries
+            # df_plot = grouped.melt(id_vars=[country_col], value_vars=[male_col, female_col], var_name="GenderCol", value_name="Count")
+            # if not df_plot.empty:
+            #     df_plot["Gender"] = df_plot["GenderCol"].apply(lambda x: "Male" if "male" in x.lower() else "Female")
+            #     bar = px.bar(df_plot, x=country_col, y="Count", color="Gender", barmode="group",
+            #                  text="Count", color_discrete_map={"Male":"#1f77b4","Female":"#ff7f0e"},
+            #                  title=f"{grad_choice} ({year_sel}) — by gender and country")
+            #     bar.update_traces(textposition="outside")
+            #     bar.update_layout(plot_bgcolor=CHART_BG, paper_bgcolor=CHART_BG, font_color=TEXT_COLOR, title_x=0.5, yaxis_title="Number")
+            #     st.plotly_chart(bar, use_container_width=True)
+            #     charts_for_export.append({"fig": bar, "caption": f"{grad_choice} ({year_sel}) — by gender and country"})
 
             # Summary (no recommendation for graduates per your request)
             if not grouped.empty:
