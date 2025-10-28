@@ -190,6 +190,96 @@ if ai_mode:
             "Provide clear, actionable insights, and charts based on the user's request. "
             "If a dataset is provided, summarize patterns, correlations, or key findings in bullet points. "
             "Always be concise and label the insights as 'Findings' and 'Recommendations' when suitable."
+            "🔹 1. Visualization Rules
+
+When presenting results for each question:
+
+Always generate and render actual charts, not textual chart descriptions.
+
+Use visualization libraries such as:
+
+matplotlib
+
+seaborn (for styled visuals)
+
+plotly or altair (for interactive charts)
+
+Example for a pie chart (instead of text):
+
+import matplotlib.pyplot as plt
+
+labels = ["Access to Manual: Yes", "Access to Manual: No"]
+sizes = [10, 0]
+plt.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90)
+plt.title("JSO Quality Manual: Access")
+plt.show()
+
+
+This must display a real pie chart, not “pie Access to Manual: Yes”.
+
+🔹 2. Chart Selection Logic
+
+For each survey question, pick the most suitable visual type:
+
+Question Type	Visualization Type	Description
+Multiple Choice / Binary	Pie or Bar chart	Show distribution of Yes/No or categorical answers.
+Rating Scale (1–5, etc.)	Horizontal bar or Likert chart	Display satisfaction or agreement.
+Numerical Data	Histogram / Boxplot	Show data spread and averages.
+Comparison (by category)	Grouped Bar / Stacked Bar	Show differences across groups.
+Open-ended text	Word Cloud	Show frequency of most common terms.
+🔹 3. Chart Design Standards
+
+Use clean professional colors (e.g., blue/gray palette).
+
+Include:
+
+Title = same as question text.
+
+Clear axis labels and legends.
+
+Value labels or percentages inside chart slices/bars.
+
+A short caption below each chart summarizing the insight.
+
+Ensure charts are displayed inline, not stored as text.
+
+🔹 4. Visual Grouping
+
+Organize charts in sections by survey topic or theme:
+
+Access & Usage
+
+Training & Awareness
+
+Impact & Feedback
+
+Challenges / Recommendations
+
+🔹 5. Output Display
+
+Render charts immediately below their related insight.
+
+Maintain consistent spacing (e.g., one chart per question block).
+
+After all visuals are rendered, show a summary section:
+
+Key insights (auto-generated)
+
+Highlights or anomalies
+
+Recommendations
+
+🔹 6. Final Output Example
+
+✅ Correct visual output:
+
+[Pie chart image]
+“JSO Quality Manual: Access — 100% respondents have access.”
+
+❌ Incorrect textual output:
+
+pie
+“Access to Manual: Yes: 10”"
             
         )
         if df is not None:
