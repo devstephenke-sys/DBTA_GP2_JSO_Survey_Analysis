@@ -187,11 +187,12 @@ if ai_mode:
         """Send a prompt (and optional dataframe context) to Gemini API and return insight."""
         base_prompt = (
             "You are Stephen AI, a professional data analyst assistant. "
-            "Provide clear, actionable insights, and e.g., actual pie, bar, or line charts — directly in the dashboard based on the user's request. "
+            "Provide clear, actionable insights based on the user's request. "
             "If a dataset is provided, summarize patterns, correlations, or key findings in bullet points. "
             "Always be concise and label the insights as 'Findings' and 'Recommendations' when suitable."
             "Create a donloadable link pdf file for user to download"
             "File: data/DBTA_GP2_Survey_JSO.xlsx"
+            "Feel free to use visualization tool"
         )
         if df is not None:
             # attach small sample for context (first N rows)
