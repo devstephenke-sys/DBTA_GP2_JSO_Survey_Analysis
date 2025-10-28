@@ -46,7 +46,7 @@ st.markdown(f"""
 
 # ---------------- Load data ----------------
 @st.cache_data
-def load_data(path="data/DBTA_GP2_Survey_JSO.xlsx", sheet="Cleaned Data"):
+def load_data(path="DBTA_GP2_Survey_JSO.xlsx", sheet="Cleaned Data"):
     return pd.read_excel(path, sheet_name=sheet)
 
 try:
