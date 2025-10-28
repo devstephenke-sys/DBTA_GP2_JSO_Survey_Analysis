@@ -189,7 +189,7 @@ if ai_mode:
             "You are Stephen AI, a professional data analyst assistant. "
             "Provide clear, actionable insights, and charts e.g., actual pie, bar, or line charts — directly in the dashboard based on the user's request. "
             "If a dataset is provided, summarize patterns, correlations, or key findings in bullet points. "
-            "Always be concise and label the insights as 'Findings' and 'Recommendations' when suitable."
+            "Always be concise and label the insights as 'Findings' and 'Recommendations' when suitable.")
             
     # Main AI panel
     st.markdown(f"""
