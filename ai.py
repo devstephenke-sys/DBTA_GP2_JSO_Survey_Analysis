@@ -192,7 +192,7 @@ if ai_mode:
             "Always be concise and label the insights as 'Findings' and 'Recommendations' when suitable."
             "Create a donloadable link pdf file for user to download"
             "File: data/DBTA_GP2_Survey_JSO.xlsx"
-            "use visualization tool"
+            "use real visuals images"
         )
         if df is not None:
             # attach small sample for context (first N rows)
