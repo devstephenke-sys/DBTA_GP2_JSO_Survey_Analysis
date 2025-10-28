@@ -190,6 +190,8 @@ if ai_mode:
             "Provide clear, actionable insights (no charts) based on the user's request. "
             "If a dataset is provided, summarize patterns, correlations, or key findings in bullet points. "
             "Always be concise and label the insights as 'Findings' and 'Recommendations' when suitable."
+            "Create a donloadable link pdf file for user to download"
+            "File: data/DBTA_GP2_Survey_JSO.xlsx"
         )
         if df is not None:
             # attach small sample for context (first N rows)
